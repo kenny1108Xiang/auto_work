@@ -1,0 +1,12 @@
+# Google Forms Auto-Fill Bot Requirements
+# Python 3.9 or higher is required
+
+# Web automation
+playwright==1.55.0
+
+# Async SMTP for email sending
+aiosmtplib==3.0.2
+
+# Timezone data (optional, fallback to UTC+8 if missing)
+tzdata==2025.2
+

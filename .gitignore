@@ -1,1 +1,12 @@
 venv/
+__pycache__/
+
+mail_key.env
+
+forms_url-test.txt
+
+fail_img/
+fail_img/*.png
+!fail_img/.gitkeep
+
+SETUP.md
