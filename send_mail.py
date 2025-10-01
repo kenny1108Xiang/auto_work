@@ -301,7 +301,7 @@ async def _send_email_with_attachment(subject: str, body: str, attachment_paths:
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
     except ImportError:
-        raise ImportError("請先安裝 aiosmtplib：pip install aiosmtplib")
+        raise ImportError("請先安裝 aiosmtplib: pip install aiosmtplib")
     
     # 讀取應用程式密碼
     app_password = _load_app_password()
