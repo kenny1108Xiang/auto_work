@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import List, Tuple
 
 # ==== Configurable Section ====
-GMAIL_ACCOUNT = "denny0979539212@gmail.com"  # Sender Gmail account
-RECIPIENT_EMAIL = "kennymail@jinxiang.dev"  # Recipient email
+GMAIL_ACCOUNT = "Send mail"  # Sender Gmail account
+RECIPIENT_EMAIL = "Recipient email"  # Recipient email
 SENDER_NAME = "表單填寫機器人"  # Sender display name
 MAIL_KEY_FILE = "mail_key.env"  # App password file path
 
