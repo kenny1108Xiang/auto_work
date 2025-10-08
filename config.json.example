@@ -1,0 +1,30 @@
+{
+  "user": {
+    "name": "輸入你的姓名"
+  },
+  "email": {
+    "gmail_account": "輸入發送人的mail",
+    "recipient_email": "輸入接收人的mail",
+    "sender_name": "輸入發送人的名稱"
+  },
+  "dates": {
+    "weekdays": ["三", "四", "六"],
+    "reasons": {
+      "六": "因為家庭有重要事務需要處理所以請假",
+      "日": "因為學校需要上課所以無法出勤請假"
+    }
+  },
+  "forms_urls": [
+    "https://forms.gle/GTjSPcJjtYJgb4qz8",
+    "https://forms.gle/M8Jdm8gCKiAMW2R28",
+    "https://forms.gle/ArbaQXNe7R9oHYvJA",
+    "https://forms.gle/eB7hcUUxoMYX5bap8",
+    "https://forms.gle/sHV7kfMktfoX55K4A",
+    "https://forms.gle/ctieTHBEbMoBRNe26",
+    "https://forms.gle/uXW3XdYt7V3eLZbg7"
+  ],
+  "settings": {
+    "headless": false,
+    "min_reason_length": 15
+  }
+}

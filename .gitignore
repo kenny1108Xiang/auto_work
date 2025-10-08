@@ -1,12 +1,19 @@
+# Python
 venv/
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 
+# Sensitive files
 mail_key.env
+config/settings.py
+config.json
 
+# Test files
 forms_url-test.txt
 
+# Screenshots
 fail_img/
 fail_img/*.png
 !fail_img/.gitkeep
-
-SETUP.md
