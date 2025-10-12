@@ -60,79 +60,44 @@ class FormFiller:
     
     async def check_vacation(self) -> None:
         """Click vacation radio button"""
-        # Special handling for Sunday forms (no aria-label, empty data-value, empty span)
-        if self.weekday_name == "日":
-            try:
-                radiogroup = self.page.locator("div[role='radiogroup']:has-text('星期日')").first
-                await radiogroup.wait_for(state="visible", timeout=8_000)
-                
-                radio = radiogroup.locator("div[role='radio']").first
-                await radio.scroll_into_view_if_needed(timeout=5_000)
-                await radio.click(timeout=5_000)
-                await self.page.wait_for_timeout(50)
-                
-                is_checked = await radio.get_attribute("aria-checked")
-                if is_checked == "true":
-                    return
-                else:
-                    await radio.click(force=True, timeout=5_000)
-                    await self.page.wait_for_timeout(500)
-                    is_checked = await radio.get_attribute("aria-checked")
-                    if is_checked == "true":
-                        return
-            except Exception:
-                pass
-            
-            # Last resort for Sunday: JavaScript click
-            try:
-                radio = self.page.locator("div[role='radiogroup'] div[role='radio']").first
-                await radio.wait_for(state="attached", timeout=8_000)
-                await radio.evaluate("element => element.click()")
-                await self.page.wait_for_timeout(500)
-                
-                is_checked = await radio.get_attribute("aria-checked")
-                if is_checked == "true":
-                    return
-            except Exception:
-                pass
+        # 統一使用標準策略來選取所有日期的 '休假' 選項
+        selector = "[role='radio'][aria-label='休假']"
         
-        # Standard strategy for other weekdays (Monday-Saturday)
-        else:
-            selector = "[role='radio'][aria-label='休假']"
+        # 主要策略: 使用 aria-label 定位
+        try:
+            locator = self.page.locator(selector).first
+            await locator.wait_for(state="visible", timeout=8_000)
+            await locator.scroll_into_view_if_needed(timeout=5_000)
+            await locator.click(timeout=5_000)
+            await self.page.wait_for_timeout(50)
             
-            try:
-                locator = self.page.locator(selector).first
-                await locator.wait_for(state="visible", timeout=8_000)
-                await locator.scroll_into_view_if_needed(timeout=5_000)
-                await locator.click(timeout=5_000)
-                await self.page.wait_for_timeout(50)
+            is_checked = await locator.get_attribute("aria-checked")
+            if is_checked == "true":
+                return
+            else:
+                # 如果第一次點擊無效，強制再次點擊
+                await locator.click(force=True, timeout=5_000)
+                await self.page.wait_for_timeout(500)
                 is_checked = await locator.get_attribute("aria-checked")
                 if is_checked == "true":
                     return
-                else:
-                    await locator.click(force=True, timeout=5_000)
-                    await self.page.wait_for_timeout(500)
-                    is_checked = await locator.get_attribute("aria-checked")
-                    if is_checked == "true":
-                        return
-                        
-            except Exception:
-                pass
-            
-            # Last resort: Use JavaScript to click
-            try:
-                radio = self.page.locator("[role='radio'][aria-label='休假']").first
-                await radio.wait_for(state="attached", timeout=8_000)
-                await radio.evaluate("element => element.click()")
-                await self.page.wait_for_timeout(500)
-                
-                is_checked = await radio.get_attribute("aria-checked")
-                if is_checked == "true":
-                    return
-            except Exception:
-                pass
+        except Exception:
+            pass
         
-        # If all strategies fail, raise error
+        # 備用策略: 使用 JavaScript 點擊
+        try:
+            radio = self.page.locator(selector).first
+            await radio.wait_for(state="attached", timeout=8_000)
+            await radio.evaluate("element => element.click()")
+            await self.page.wait_for_timeout(500)
+            
+            is_checked = await radio.get_attribute("aria-checked")
+            if is_checked == "true":
+                return
+        except Exception:
+            pass
+        
+        # 如果所有策略都失敗，輸出調試資訊並拋出錯誤
         try:
             radiogroup = self.page.locator("div[role='radiogroup']")
             count = await radiogroup.count()
