@@ -109,7 +109,7 @@ cp config.json.example config.json
     "https://forms.gle/eB7hcUUxoMYX5bap8",
     "https://forms.gle/sHV7kfMktfoX55K4A",
     "https://forms.gle/ctieTHBEbMoBRNe26",
-    "https://forms.gle/uXW3XdYt7V3eLZbg7"
+    "https://forms.gle/V6RSL2h9BQYpLUgF8"
   ],
   "settings": {
     "headless": false,  ← true: 無頭模式, false: 顯示瀏覽器, 基本上不用改
