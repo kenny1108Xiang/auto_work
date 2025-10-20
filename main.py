@@ -4,7 +4,7 @@ import requests
 import re
 import logging
 import sys
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from get_field_id import resolve_short_url, fetch_form_entry_ids_for_day
 
 # 設定 logging
@@ -194,65 +194,6 @@ def display_config(config):
     print("=" * 60)
 
 
-def get_user_input():
-    """
-    詢問使用者輸入執行所需的所有資訊。
-    
-    返回:
-        tuple: (mode, day_number, name, reason, leave_option)
-               如果使用者取消或輸入無效，返回 None
-    """
-    print("=" * 50)
-    print("Google 表單自動填寫工具")
-    print("=" * 50)
-    
-    # 詢問模式
-    while True:
-        mode_input = input("\n請選擇執行模式 (0=測試, 1=正式): ").strip()
-        if mode_input in ['0', '1']:
-            mode = int(mode_input)
-            mode_name = "測試模式" if mode == 0 else "正式模式"
-            print(f"✓ 已選擇: {mode_name}")
-            break
-        else:
-            print("✗ 請輸入 0 或 1")
-    
-    # 詢問星期幾
-    while True:
-        day_input = input("\n請輸入星期幾 (1=星期一, 7=星期日): ").strip()
-        if day_input.isdigit() and 1 <= int(day_input) <= 7:
-            day_number = int(day_input)
-            day_names = ['', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
-            print(f"✓ 已選擇: {day_names[day_number]}")
-            break
-        else:
-            print("✗ 請輸入 1-7 之間的數字")
-    
-    # 詢問姓名
-    name = input("\n請輸入姓名: ").strip()
-    while not name:
-        print("✗ 姓名不可為空")
-        name = input("請輸入姓名: ").strip()
-    print(f"✓ 姓名: {name}")
-    
-    # 詢問原因（只在星期六、日時詢問）
-    reason = None
-    if day_number >= 6:
-        reason = input("\n請輸入原因: ").strip()
-        while not reason:
-            print("✗ 星期六/日必須填寫原因")
-            reason = input("請輸入原因: ").strip()
-        print(f"✓ 原因: {reason}")
-    
-    # 詢問休假選項
-    leave_option = input("\n請輸入休假選項 (直接按 Enter 使用預設「休假」): ").strip()
-    if not leave_option:
-        leave_option = "休假"
-    print(f"✓ 休假選項: {leave_option}")
-    
-    return mode, day_number, name, reason, leave_option
-
-
 def submit_form(day_number, mode, name, reason=None, leave_option="休假"):
     """
     提交 Google 表單。
@@ -269,13 +210,15 @@ def submit_form(day_number, mode, name, reason=None, leave_option="休假"):
         leave_option (str, optional): 休假選項，預設為 "休假"
     
     Returns:
-        bool: 是否成功提交
+        tuple: (day_number, bool) -> (星期數字, 是否成功提交)
     """
+    day_name = DAY_NAMES[day_number]
+    
     # 步驟 1: 解析短網址取得完整的表單 URL
     viewform_url = resolve_short_url(day_number, mode)
     if not viewform_url:
-        logging.error("無法取得表單 URL，提交失敗。")
-        return False
+        logging.error(f"[{day_name}] 無法取得表單 URL，提交失敗。")
+        return day_number, False
     
     # 步驟 2: 生成 formResponse URL
     formresponse_url = viewform_url.replace('/viewform', '/formResponse')
@@ -288,28 +231,28 @@ def submit_form(day_number, mode, name, reason=None, leave_option="休假"):
         
         match = re.search(r'name="fbzx" value="([^"]+)"', response_get.text)
         if not match:
-            logging.error("在頁面中找不到必要的 fbzx token。")
-            return False
+            logging.error(f"[{day_name}] 在頁面中找不到必要的 fbzx token。")
+            return day_number, False
         
         payload = {"fbzx": match.group(1)}
-        logging.info("成功取得 fbzx token。")
+        logging.info(f"[{day_name}] 成功取得 fbzx token。")
 
     except requests.exceptions.RequestException as e:
-        logging.error(f"無法訪問表單頁面以取得 token。 {e}")
-        return False
+        logging.error(f"[{day_name}] 無法訪問表單頁面以取得 token。 {e}")
+        return day_number, False
     
     # 步驟 4: 取得表單欄位 ID
     name_entry, option_entry, reason_entry = fetch_form_entry_ids_for_day(viewform_url, day_number)
     
     # 檢查必要欄位
     if not name_entry or not option_entry:
-        logging.error("無法取得必要的表單欄位 ID (姓名或選項)。")
-        return False
+        logging.error(f"[{day_name}] 無法取得必要的表單欄位 ID (姓名或選項)。")
+        return day_number, False
     
     # 星期六、日需要檢查 reason_entry
     if day_number >= 6 and not reason_entry:
-        logging.error(f"星期 {day_number} 需要原因欄位，但無法取得 reason_entry ID。")
-        return False
+        logging.error(f"[{day_name}] 需要原因欄位，但無法取得 reason_entry ID。")
+        return day_number, False
     
     # 步驟 5: 組合使用者資料
     user_data = {
@@ -326,7 +269,7 @@ def submit_form(day_number, mode, name, reason=None, leave_option="休假"):
     # 步驟 6: 提交表單
     headers = {'Referer': viewform_url}
     
-    logging.info(f"正在提交資料：姓名='{name}', 選項='{leave_option}'" + 
+    logging.info(f"[{day_name}] 正在提交資料：姓名='{name}', 選項='{leave_option}'" + 
                  (f", 原因='{reason}'" if day_number >= 6 and reason else ""))
     
     try:
@@ -334,20 +277,21 @@ def submit_form(day_number, mode, name, reason=None, leave_option="休假"):
         response_post.raise_for_status()
         
         if response_post.status_code == 200:
-            logging.info("✅ 提交成功！")
-            return True
+            logging.info(f"[{day_name}] ✅ 提交成功！")
+            return day_number, True
         else:
-            logging.error(f"❌ 提交失敗，狀態碼：{response_post.status_code}")
-            return False
+            logging.error(f"[{day_name}] ❌ 提交失敗，狀態碼：{response_post.status_code}")
+            return day_number, False
             
     except requests.exceptions.RequestException as e:
-        logging.error(f"❌ 提交時發生錯誤： {e}")
-        return False
+        logging.error(f"[{day_name}] ❌ 提交時發生錯誤： {e}")
+        return day_number, False
+
 
 # --- 如何使用 ---
 if __name__ == "__main__":
     print("\n" + "=" * 60)
-    print("🚀 Google 表單自動填寫工具")
+    print("🚀 Google 表單自動填寫工具 (多執行緒版)")
     print("=" * 60 + "\n")
     
     # 讀取設定檔
@@ -386,42 +330,46 @@ if __name__ == "__main__":
             print("✗ 請輸入 0 或 1")
     
     print("\n" + "=" * 60)
-    print("開始提交表單...")
+    print("開始併發提交表單...")
     print("=" * 60 + "\n")
     
-    # 對每個請假日期提交表單
+    # 對每個請假日期併發提交表單
     success_count = 0
     fail_count = 0
     
-    for day_number in config['days']:
-        day_name = DAY_NAMES[day_number]
-        print(f"\n{'=' * 60}")
-        print(f"📝 正在處理：{day_name}")
-        print(f"{'=' * 60}")
+    with ThreadPoolExecutor(max_workers=len(config['days'])) as executor:
+        futures = []
+        for day_number in config['days']:
+            reason = None
+            if day_number == 6:
+                reason = config['reason_sat']
+            elif day_number == 7:
+                reason = config['reason_sun']
+            
+            future = executor.submit(
+                submit_form,
+                day_number=day_number,
+                mode=mode,
+                name=config['name'],
+                reason=reason,
+                leave_option="休假"
+            )
+            futures.append(future)
         
-        # 決定原因
-        reason = None
-        if day_number == 6:
-            reason = config['reason_sat']
-        elif day_number == 7:
-            reason = config['reason_sun']
-        
-        # 提交表單
-        success = submit_form(
-            day_number=day_number,
-            mode=mode,
-            name=config['name'],
-            reason=reason,
-            leave_option="休假"
-        )
-        
-        if success:
-            success_count += 1
-            print(f"✅ {day_name} 提交成功")
-        else:
-            fail_count += 1
-            print(f"❌ {day_name} 提交失敗")
-    
+        for future in as_completed(futures):
+            try:
+                day_num, success = future.result()
+                day_name = DAY_NAMES[day_num]
+                if success:
+                    success_count += 1
+                    print(f"✅ {day_name} 提交成功")
+                else:
+                    fail_count += 1
+                    print(f"❌ {day_name} 提交失敗")
+            except Exception as e:
+                fail_count += 1
+                logging.error(f"處理任務時發生未預期的錯誤: {e}")
+
     # 顯示總結
     print("\n" + "=" * 60)
     print("📊 提交總結")
