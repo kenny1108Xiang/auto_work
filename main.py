@@ -4,8 +4,13 @@ import requests
 import re
 import logging
 import sys
+import time
+from datetime import datetime, timedelta, time as dt_time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from get_field_id import resolve_short_url, fetch_form_entry_ids_for_day
+from mail.send_mail import send_summary_email
+
+# --- 以下的程式碼保持不變，直到 submit_form 函式 ---
 
 # 設定 logging
 logging.basicConfig(
@@ -25,18 +30,6 @@ DAY_NAMES = ['', '星期一', '星期二', '星期三', '星期四', '星期五'
 def read_config_file(file_path="data.txt"):
     """
     讀取設定檔並解析內容。
-    
-    參數:
-        file_path: 設定檔路徑
-    
-    返回:
-        dict: {
-            'name': 姓名,
-            'days': [星期數字列表],
-            'reason_sat': 星期六原因,
-            'reason_sun': 星期日原因
-        }
-        失敗則返回 None
     """
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -111,12 +104,6 @@ def read_config_file(file_path="data.txt"):
 def validate_config(config):
     """
     驗證設定檔內容，特別是原因字數。
-    
-    參數:
-        config: read_config_file() 返回的設定字典
-    
-    返回:
-        bool: 驗證是否通過
     """
     days = config['days']
     reason_sat = config['reason_sat']
@@ -125,7 +112,7 @@ def validate_config(config):
     # 檢查是否需要星期六原因
     if 6 in days:
         if not reason_sat:
-            print("\n❌ 錯誤：請假星期包含「星期六」，但未填寫星期六原因")
+            print("\n錯誤：請假星期包含「星期六」，但未填寫星期六原因")
             print("請在 data.txt 的第三行填寫至少 15 個字的原因（不含空白）")
             return False
         
@@ -135,7 +122,7 @@ def validate_config(config):
         
         if char_count < 15:
             need_more = 15 - char_count
-            print(f"\n❌ 錯誤：星期六原因字數不足")
+            print(f"\n錯誤：星期六原因字數不足")
             print(f"   需要填寫的表單：星期六")
             print(f"   目前字數：{char_count} 字（不含空白）")
             print(f"   還需補充：{need_more} 字")
@@ -145,7 +132,7 @@ def validate_config(config):
     # 檢查是否需要星期日原因
     if 7 in days:
         if not reason_sun:
-            print("\n❌ 錯誤：請假星期包含「星期日」，但未填寫星期日原因")
+            print("\n錯誤：請假星期包含「星期日」，但未填寫星期日原因")
             print("請在 data.txt 的第四行填寫至少 15 個字的原因（不含空白）")
             return False
         
@@ -155,7 +142,7 @@ def validate_config(config):
         
         if char_count < 15:
             need_more = 15 - char_count
-            print(f"\n❌ 錯誤：星期日原因字數不足")
+            print(f"\n錯誤：星期日原因字數不足")
             print(f"   需要填寫的表單：星期日")
             print(f"   目前字數：{char_count} 字（不含空白）")
             print(f"   還需補充：{need_more} 字")
@@ -168,213 +155,291 @@ def validate_config(config):
 def display_config(config):
     """
     顯示設定檔內容給使用者確認。
-    
-    參數:
-        config: read_config_file() 返回的設定字典
     """
     print("\n" + "=" * 60)
-    print("📋 讀取到的設定內容")
+    print("讀取到的設定內容")
     print("=" * 60)
     
-    print(f"\n👤 姓名：{config['name']}")
+    print(f"\n姓名：{config['name']}")
     
     day_list = [DAY_NAMES[d] for d in config['days']]
-    print(f"📅 請假星期：{' 、 '.join(day_list)}")
+    print(f"請假星期：{' 、 '.join(day_list)}")
     
     if 6 in config['days']:
         reason_sat_no_space = config['reason_sat'].replace(' ', '').replace('\t', '').replace('\n', '')
         char_count = len(reason_sat_no_space)
-        print(f"📝 星期六原因：{config['reason_sat']} ({char_count} 字)")
+        print(f"星期六原因：{config['reason_sat']} ({char_count} 字)")
     
     if 7 in config['days']:
         reason_sun_no_space = config['reason_sun'].replace(' ', '').replace('\t', '').replace('\n', '')
         char_count = len(reason_sun_no_space)
-        print(f"📝 星期日原因：{config['reason_sun']} ({char_count} 字)")
+        print(f"星期日原因：{config['reason_sun']} ({char_count} 字)")
     
     print("=" * 60)
 
+# --- 函式修改與新增 ---
 
-def submit_form(day_number, mode, name, reason=None, leave_option="休假"):
+def prepare_submission_data(day_number, mode, name, reason=None, leave_option="休假"):
     """
-    提交 Google 表單。
-    
-    根據星期數字自動決定需要填寫的欄位：
-    - 星期一到五 (1-5)：只提交姓名和選項
-    - 星期六到日 (6-7)：提交姓名、選項和原因
-
-    Args:
-        day_number (int): 星期數字 (1-7)
-        mode (int): 執行模式 (0=測試, 1=正式)
-        name (str): 姓名
-        reason (str, optional): 原因 (星期六、日必填)
-        leave_option (str, optional): 休假選項，預設為 "休假"
-    
-    Returns:
-        tuple: (day_number, bool) -> (星期數字, 是否成功提交)
+    預處理單一表單的提交資料，但不實際提交。
+    返回一個包含所有提交所需資訊的字典，如果準備失敗則返回 None。
     """
     day_name = DAY_NAMES[day_number]
+    logging.info(f"[{day_name}] 開始預先準備提交資料...")
     
-    # 步驟 1: 解析短網址取得完整的表單 URL
+    # 步驟 1: 解析 URL
     viewform_url = resolve_short_url(day_number, mode)
     if not viewform_url:
-        logging.error(f"[{day_name}] 無法取得表單 URL，提交失敗。")
-        return day_number, False
-    
-    # 步驟 2: 生成 formResponse URL
+        return None
     formresponse_url = viewform_url.replace('/viewform', '/formResponse')
     
-    # 步驟 3: 建立 session 並訪問頁面取得 fbzx token
-    session = requests.Session()
+    # 步驟 2: 取得 fbzx token
     try:
-        response_get = session.get(viewform_url)
+        response_get = requests.get(viewform_url)
         response_get.raise_for_status()
-        
         match = re.search(r'name="fbzx" value="([^"]+)"', response_get.text)
         if not match:
-            logging.error(f"[{day_name}] 在頁面中找不到必要的 fbzx token。")
-            return day_number, False
-        
-        payload = {"fbzx": match.group(1)}
-        logging.info(f"[{day_name}] 成功取得 fbzx token。")
-
+            logging.error(f"[{day_name}] 找不到 fbzx token。")
+            return None
+        fbzx = match.group(1)
     except requests.exceptions.RequestException as e:
-        logging.error(f"[{day_name}] 無法訪問表單頁面以取得 token。 {e}")
-        return day_number, False
-    
-    # 步驟 4: 取得表單欄位 ID
+        logging.error(f"[{day_name}] 準備 token 時無法訪問表單頁面: {e}")
+        return None
+        
+    # 步驟 3: 取得欄位 ID
     name_entry, option_entry, reason_entry = fetch_form_entry_ids_for_day(viewform_url, day_number)
-    
-    # 檢查必要欄位
-    if not name_entry or not option_entry:
-        logging.error(f"[{day_name}] 無法取得必要的表單欄位 ID (姓名或選項)。")
-        return day_number, False
-    
-    # 星期六、日需要檢查 reason_entry
-    if day_number >= 6 and not reason_entry:
-        logging.error(f"[{day_name}] 需要原因欄位，但無法取得 reason_entry ID。")
-        return day_number, False
-    
-    # 步驟 5: 組合使用者資料
-    user_data = {
-        name_entry: name,
-        option_entry: leave_option
-    }
-    
-    # 只在星期六、日才加入原因欄位
+    if not name_entry or not option_entry or (day_number >= 6 and not reason_entry):
+        logging.error(f"[{day_name}] 無法取得必要的欄位 ID。")
+        return None
+        
+    # 步驟 4: 組合 payload
+    payload = {"fbzx": fbzx}
+    user_data = {name_entry: name, option_entry: leave_option}
     if day_number >= 6 and reason:
         user_data[reason_entry] = reason
-    
     payload.update(user_data)
     
-    # 步驟 6: 提交表單
-    headers = {'Referer': viewform_url}
+    logging.info(f"[{day_name}] 資料準備完成。")
     
-    logging.info(f"[{day_name}] 正在提交資料：姓名='{name}', 選項='{leave_option}'" + 
-                 (f", 原因='{reason}'" if day_number >= 6 and reason else ""))
+    # 回傳所有提交時需要的資訊
+    return {
+        "day_number": day_number,
+        "day_name": day_name,
+        "url": formresponse_url,
+        "headers": {'Referer': viewform_url},
+        "payload": payload
+    }
+
+
+def execute_submission(submission_data):
+    """
+    執行單一已準備好的表單提交任務。
+    """
+    day_name = submission_data["day_name"]
+    logging.info(f"[{day_name}] 正在提交...")
     
     try:
-        response_post = session.post(formresponse_url, headers=headers, data=payload)
-        response_post.raise_for_status()
-        
-        if response_post.status_code == 200:
-            logging.info(f"[{day_name}] ✅ 提交成功！")
-            return day_number, True
-        else:
-            logging.error(f"[{day_name}] ❌ 提交失敗，狀態碼：{response_post.status_code}")
-            return day_number, False
+        with requests.Session() as session:
+            response_post = session.post(
+                submission_data["url"],
+                headers=submission_data["headers"],
+                data=submission_data["payload"]
+            )
+            response_post.raise_for_status()
             
+            if response_post.status_code == 200:
+                logging.info(f"[{day_name}] 提交成功！")
+                return submission_data["day_number"], True
+            else:
+                logging.error(f"[{day_name}] 提交失敗，狀態碼：{response_post.status_code}")
+                return submission_data["day_number"], False
+                
     except requests.exceptions.RequestException as e:
-        logging.error(f"[{day_name}] ❌ 提交時發生錯誤： {e}")
-        return day_number, False
+        logging.error(f"[{day_name}] 提交時發生錯誤： {e}")
+        return submission_data["day_number"], False
 
 
-# --- 如何使用 ---
+def wait_for_scheduled_time():
+    """
+    計算並等待直到下一個星期三的 13:59:59.500。
+    """
+    now = datetime.now()
+    # 星期三的 weekday() 是 2 (星期一為0)
+    days_until_wednesday = (2 - now.weekday() + 7) % 7
+    
+    # 如果今天是星期三，且時間已超過 14:00，則目標是下週的星期三
+    if days_until_wednesday == 0 and now.time() >= dt_time(14, 0):
+        days_until_wednesday = 7
+        
+    target_date = now.date() + timedelta(days=days_until_wednesday)
+    # 目標時間設為 13:59:59.350
+    target_datetime = datetime.combine(target_date, dt_time(13, 59, 59, 350000))
+    
+    wait_seconds = (target_datetime - now).total_seconds()
+    
+    if wait_seconds <= 0:
+        print("目標時間已過，將立即執行提交。")
+        return
+        
+    print("\n" + "=" * 60)
+    print(f"已設定排程，將在以下時間點提交表單：")
+    print(f"   {target_datetime.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}")
+    print("=" * 60)
+
+    # 倒數計時顯示
+    try:
+        while wait_seconds > 0:
+            mins, secs = divmod(wait_seconds, 60)
+            hours, mins = divmod(mins, 60)
+            days, hours = divmod(hours, 24)
+            
+            timer_str = f"距離提交還有: {int(days)}天 {int(hours):02d}時 {int(mins):02d}分 {int(secs):02d}秒"
+            print(timer_str, end='\r')
+            
+            # 決定 sleep 的時間，越接近目標時間，檢查頻率越高
+            if wait_seconds > 60:
+                time.sleep(1)
+            elif wait_seconds > 1:
+                time.sleep(0.1)
+            else:
+                # 最後一秒高精度等待
+                time.sleep(wait_seconds)
+                break
+            
+            wait_seconds = (target_datetime - datetime.now()).total_seconds()
+        
+        print("\n時間到達，立即開始提交！")
+
+    except KeyboardInterrupt:
+        print("\n\n使用者手動中斷等待，程式結束。")
+        sys.exit(0)
+
+
+# --- 主程式修改 ---
 if __name__ == "__main__":
     print("\n" + "=" * 60)
-    print("🚀 Google 表單自動填寫工具 (多執行緒版)")
+    print("Google 表單自動填寫工具 (多執行緒/排程版)")
     print("=" * 60 + "\n")
     
-    # 讀取設定檔
-    logging.info("正在讀取設定檔 data.txt...")
+    # 讀取並驗證設定
     config = read_config_file("data.txt")
-    
     if not config:
-        print("\n❌ 無法讀取設定檔，程式結束")
         sys.exit(1)
     
-    # 顯示設定內容
     display_config(config)
     
-    # 驗證設定
     if not validate_config(config):
-        print("\n❌ 設定驗證失敗，程式結束\n")
         sys.exit(1)
     
-    # 詢問使用者確認
-    print("\n請確認以上設定是否正確")
-    confirm = input("是否繼續？(Y/n): ").strip().lower()
+    # 使用者確認
+    confirm = input("\n請確認以上設定是否正確 (Y/n): ").strip().lower()
     if confirm and confirm not in ['y', 'yes', '是']:
-        print("\n⚠️  使用者取消操作")
+        print("\n使用者取消操作")
         sys.exit(0)
     
-    # 詢問執行模式
+    # 選擇模式
     print("\n" + "-" * 60)
     while True:
         mode_input = input("請選擇執行模式 (0=測試, 1=正式): ").strip()
         if mode_input in ['0', '1']:
             mode = int(mode_input)
-            mode_name = "測試模式" if mode == 0 else "正式模式"
-            print(f"✓ 已選擇: {mode_name}")
             break
         else:
             print("✗ 請輸入 0 或 1")
     
+    # --- 資料預處理階段 ---
     print("\n" + "=" * 60)
-    print("開始併發提交表單...")
-    print("=" * 60 + "\n")
+    print("開始預先準備所有表單資料...")
+    print("=" * 60)
     
-    # 對每個請假日期併發提交表單
+    prepared_tasks = []
+    with ThreadPoolExecutor(max_workers=len(config['days'])) as executor:
+        # 使用多執行緒來加速資料準備過程
+        future_to_day = {
+            executor.submit(
+                prepare_submission_data,
+                day_number, mode, config['name'], 
+                config['reason_sat'] if day_number == 6 else config['reason_sun'] if day_number == 7 else None
+            ): day_number for day_number in config['days']
+        }
+        
+        for future in as_completed(future_to_day):
+            result = future.result()
+            if result:
+                prepared_tasks.append(result)
+            else:
+                day_num = future_to_day[future]
+                logging.error(f"[{DAY_NAMES[day_num]}] 資料準備失敗，無法繼續。")
+                print("\n發生錯誤，程式結束。")
+                sys.exit(1)
+
+    print("\n所有表單資料均已準備完成！")
+    
+    # --- 根據模式決定是否等待 ---
+    if mode == 1:
+        wait_for_scheduled_time()
+    else: # mode == 0
+        print("\n測試模式，立即開始提交...")
+        
+    # --- 執行提交階段 ---
+    print("\n" + "=" * 60)
     success_count = 0
     fail_count = 0
     
-    with ThreadPoolExecutor(max_workers=len(config['days'])) as executor:
-        futures = []
-        for day_number in config['days']:
-            reason = None
-            if day_number == 6:
-                reason = config['reason_sat']
-            elif day_number == 7:
-                reason = config['reason_sun']
-            
-            future = executor.submit(
-                submit_form,
-                day_number=day_number,
-                mode=mode,
-                name=config['name'],
-                reason=reason,
-                leave_option="休假"
-            )
-            futures.append(future)
+    with ThreadPoolExecutor(max_workers=len(prepared_tasks)) as executor:
+        future_to_task = {executor.submit(execute_submission, task): task for task in prepared_tasks}
         
-        for future in as_completed(futures):
+        for future in as_completed(future_to_task):
             try:
                 day_num, success = future.result()
                 day_name = DAY_NAMES[day_num]
                 if success:
                     success_count += 1
-                    print(f"✅ {day_name} 提交成功")
+                    print(f"{day_name} 提交成功")
                 else:
                     fail_count += 1
-                    print(f"❌ {day_name} 提交失敗")
+                    print(f"{day_name} 提交失敗")
             except Exception as e:
                 fail_count += 1
-                logging.error(f"處理任務時發生未預期的錯誤: {e}")
+                task_name = future_to_task[future]['day_name']
+                logging.error(f"處理 [{task_name}] 任務時發生未預期的錯誤: {e}")
 
     # 顯示總結
     print("\n" + "=" * 60)
-    print("📊 提交總結")
+    print("提交總結")
     print("=" * 60)
-    print(f"✅ 成功：{success_count} 個表單")
-    print(f"❌ 失敗：{fail_count} 個表單")
-    print(f"📋 總計：{success_count + fail_count} 個表單")
+    print(f"成功：{success_count} 個表單")
+    print(f"失敗：{fail_count} 個表單")
+    print(f"總計：{success_count + fail_count} 個表單")
     print("=" * 60 + "\n")
+
+    # --- 發送郵件總結 ---
+    print("=" * 60)
+    print("正在準備並發送總結郵件...")
+    print("=" * 60)
+
+    # 準備郵件內容
+    submitted_days = [DAY_NAMES[d] for d in config['days']]
+    reasons = {}
+    if 6 in config['days']:
+        reasons['sat'] = config['reason_sat']
+    if 7 in config['days']:
+        reasons['sun'] = config['reason_sun']
+    
+    failed_days_list = [task['day_name'] for task in prepared_tasks if task['day_number'] not in [res[0] for res in [f.result() for f in as_completed(future_to_task) if f.result()[1]] ]]
+
+    summary_data = {
+        'submitted_days': submitted_days,
+        'reasons': reasons,
+        'all_success': fail_count == 0,
+        'failed_days': failed_days_list
+    }
+
+    # 發送郵件
+    email_sent = send_summary_email(summary_data)
+    if email_sent:
+        print("總結郵件已成功發送。")
+    else:
+        print("發送總結郵件失敗，請檢查日誌。")
+    
+    print("\n所有任務已完成！")
