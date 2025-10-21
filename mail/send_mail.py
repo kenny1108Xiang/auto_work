@@ -60,7 +60,7 @@ def render_email_html(summary_data: dict) -> str:
         if successful_day_names:
             for day_name in successful_day_names:
                 success_items.append(
-                    f"<li class='success-item'><span class='chip chip-day chip-success'>{day_name}</span></li>"
+                    f"<li class='success-item'>{day_name}</li>"
                 )
             success_list_html = "<ul class='success-list'>{}</ul>".format("\n".join(success_items))
         else:
@@ -116,6 +116,10 @@ def render_email_html(summary_data: dict) -> str:
     body,table,td,p,span,a {{ margin:0; padding:0; }}
     img {{ border:0; line-height:100%; outline:none; text-decoration:none; max-width:100%; }}
     a {{ text-decoration:none; }}
+    
+    /* Gmail 特殊重置 */
+    u + .body {{ background:#F6F8FC; }}
+    * {{ -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }}
 
     /* -------- 淺色主題（預設） -------- */
     body {{
@@ -159,13 +163,25 @@ def render_email_html(summary_data: dict) -> str:
     .meta p {{ margin:0 0 6px 0; color:#111827; }}
     .meta b {{ color:#0F172A; }}
 
-    /* 膠囊標籤、狀態徽章 */
+    /* 膠囊標籤、狀態徽章 - Gmail 優化版 */
     .chip {{
-      display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700;
-      border:1px solid #C7D2FE; background:#EEF2FF; color:#1E3A8A;
-      vertical-align:middle; margin-right:8px;
+      display:inline-block !important; /* Gmail 需要 !important */
+      padding:8px 12px !important;
+      border-radius:999px !important;
+      font-size:12px !important;
+      font-weight:700 !important;
+      border:1px solid #C7D2FE !important;
+      background:#EEF2FF !important;
+      color:#1E3A8A !important;
+      margin-right:8px !important;
+      vertical-align:middle !important;
+      text-align:center !important;
+      white-space:nowrap !important;
+      line-height:16px !important; /* 明確指定行高 */
+      min-height:32px !important; /* 確保有足夠高度 */
+      box-sizing:border-box !important;
     }}
-    .chip-day {{ min-width:56px; text-align:center; }}
+    .chip-day {{ min-width:56px !important; }}
 
     .badge {{
       display:inline-block; padding:7px 12px; border-radius:999px;
@@ -177,39 +193,83 @@ def render_email_html(summary_data: dict) -> str:
     .status {{ display:block; }}
     .hint {{ color:#4B5563; font-size:13px; margin-top:6px; }}
 
-    /* 理由列表：條列與留白 */
-    .reasons {{ list-style:none; padding-left:0; margin:0; }}
+    /* 理由列表：條列與留白 - Gmail 優化版 */
+    .reasons {{ list-style:none !important; padding-left:0 !important; margin:0 !important; }}
     .reasons li {{
-      display:flex; gap:10px; align-items:flex-start;
-      background:#F9FAFB; border:1px solid #E5E7EB; border-radius:10px;
-      padding:10px 12px; margin-bottom:8px;
-      color:#111827;
+      display:block !important; /* Gmail 用 block 更穩定 */
+      background:#F9FAFB !important;
+      border:1px solid #E5E7EB !important;
+      border-radius:10px !important;
+      padding:12px !important;
+      margin-bottom:8px !important;
+      color:#111827 !important;
+      overflow:hidden !important;
     }}
-    .reasons .reason {{ flex:1; }}
+    .reasons .chip {{ 
+      float:left !important; /* 使用 float 代替 flex */
+      margin-right:10px !important;
+      margin-bottom:0 !important;
+    }}
+    .reasons .reason {{ 
+      display:block !important;
+      overflow:hidden !important;
+      line-height:32px !important; /* 與標籤高度一致 */
+      min-height:32px !important;
+    }}
 
-    /* 失敗列表 */
-    .failures-list {{ list-style:none; padding:10px 0 0 0; margin:0; }}
+    /* 失敗列表 - Gmail 優化版 */
+    .failures-list {{ list-style:none !important; padding:10px 0 0 0 !important; margin:0 !important; }}
     .failure-item {{
-        display:flex; gap:10px; align-items:center;
-        background:#FEF2F2; border:1px solid #FECACA; border-radius:10px;
-        padding:8px 12px; margin-bottom:8px;
+        display:block !important; /* Gmail 用 block 更穩定 */
+        background:#FEF2F2 !important;
+        border:1px solid #FECACA !important;
+        border-radius:10px !important;
+        padding:12px !important;
+        margin-bottom:8px !important;
+        overflow:hidden !important;
     }}
     .failure-item .chip-day {{
-        background:#FEE2E2; border-color:#FCA5A5; color:#991B1B;
+        background:#FEE2E2 !important;
+        border-color:#FCA5A5 !important;
+        color:#991B1B !important;
+        float:left !important;
+        margin-right:10px !important;
     }}
-    .failure-reason {{ color:#991B1B; font-weight:700; font-size:13px; }}
+    .failure-reason {{ 
+      color:#991B1B !important;
+      font-weight:700 !important;
+      font-size:13px !important;
+      line-height:32px !important; /* 與標籤高度一致 */
+      min-height:32px !important;
+      display:block !important;
+      overflow:hidden !important;
+    }}
 
-    /* 成功列表 */
-    .success-list {{ list-style:none; padding:10px 0 0 0; margin:0; }}
+    /* 成功列表 - Gmail 優化版 */
+    .success-list {{ 
+      list-style:none !important;
+      padding:0 !important;
+      margin:8px 0 0 0 !important;
+    }}
     .success-item {{
-        display:flex; gap:10px; align-items:center;
-        background:#ECFDF5; border:1px solid #A7F3D0; border-radius:10px;
-        padding:8px 12px; margin-bottom:8px;
+        display:inline-block !important;
+        background:#D1FAE5 !important;
+        border:1px solid #6EE7B7 !important;
+        border-radius:999px !important;
+        padding:8px 14px !important;
+        margin:0 12px 12px 0 !important; /* 右邊和下邊留間距 */
+        font-size:12px !important;
+        font-weight:700 !important;
+        color:#065F46 !important;
+        text-align:center !important;
+        min-width:56px !important;
+        line-height:16px !important;
+        min-height:32px !important;
+        box-sizing:border-box !important;
+        white-space:nowrap !important;
+        vertical-align:top !important;
     }}
-    .success-item .chip-day {{
-        background:#D1FAE5; border-color:#6EE7B7; color:#065F46;
-    }}
-    .chip-success {{ background:#D1FAE5; border-color:#6EE7B7; color:#065F46; }}
+    .chip-success {{ background:#D1FAE5 !important; border-color:#6EE7B7 !important; color:#065F46 !important; }}
 
     /* 結果區塊標籤 */
     .result-section {{ margin-top:8px; }}
@@ -222,37 +282,41 @@ def render_email_html(summary_data: dict) -> str:
 
     /* -------- 深色模式：手動指定避免被客戶端自動反色影響對比 -------- */
     @media (prefers-color-scheme: dark) {{
-      body {{ background:#0B0F14; color:#E5E7EB; }}
-      .container {{ background:#0F1720; border-color:#1F2937; }}
-      .header {{ background:#0F1720; border-bottom-color:#1F2937; }}
-      .title {{ color:#F3F4F6; }}
-      .section + .section {{ border-top-color:#1F2937; }}
-      .section-title {{ color:#F3F4F6; border-left-color:#3B82F6; }}
-      .card {{ background:#111827; border-color:#334155; }}
-      .meta p {{ color:#E5E7EB; }}
-      .meta b {{ color:#FFFFFF; }}
-      .chip {{ background:#13233F; border-color:#1E3A8A; color:#93C5FD; }}
-      .reasons li {{ background:#111827; border-color:#334155; color:#E5E7EB; }}
-      .footer {{ background:#0F1720; border-top-color:#1F2937; color:#9CA3AF; }}
-      .hint {{ color:#9CA3AF; }}
-      .badge.success {{ color:#86EFAC; background:#052E1A; border-color:#14532d; }}
-      .badge.failure {{ color:#FCA5A5; background:#2A0B0B; border-color:#7f1d1d; }}
+      body {{ background:#0B0F14 !important; color:#E5E7EB !important; }}
+      .container {{ background:#0F1720 !important; border-color:#1F2937 !important; }}
+      .header {{ background:#0F1720 !important; border-bottom-color:#1F2937 !important; }}
+      .title {{ color:#F3F4F6 !important; }}
+      .section + .section {{ border-top-color:#1F2937 !important; }}
+      .section-title {{ color:#F3F4F6 !important; border-left-color:#3B82F6 !important; }}
+      .card {{ background:#111827 !important; border-color:#334155 !important; }}
+      .meta p {{ color:#E5E7EB !important; }}
+      .meta b {{ color:#FFFFFF !important; }}
+      .chip {{ background:#1E3A8A !important; border-color:#3B82F6 !important; color:#93C5FD !important; }}
+      .reasons li {{ background:#1F2937 !important; border-color:#374151 !important; color:#E5E7EB !important; }}
+      .reasons .reason {{ color:#E5E7EB !important; }}
+      .footer {{ background:#0F1720 !important; border-top-color:#1F2937 !important; color:#9CA3AF !important; }}
+      .hint {{ color:#9CA3AF !important; }}
+      .badge.success {{ color:#86EFAC !important; background:#052E1A !important; border-color:#14532d !important; }}
+      .badge.failure {{ color:#FCA5A5 !important; background:#2A0B0B !important; border-color:#7f1d1d !important; }}
       
-      .failure-item {{ background:#2A0B0B; border-color:#7f1d1d; }}
-      .failure-item .chip-day {{ background:#450a0a; border-color:#991B1B; color:#FCA5A5; }}
-      .failure-reason {{ color:#FCA5A5; }}
+      .failure-item {{ background:#2A0B0B !important; border-color:#7f1d1d !important; }}
+      .failure-item .chip-day {{ background:#450a0a !important; border-color:#991B1B !important; color:#FCA5A5 !important; }}
+      .failure-reason {{ color:#FCA5A5 !important; }}
       
-      .success-item {{ background:#052E1A; border-color:#14532d; }}
-      .success-item .chip-day {{ background:#064E3B; border-color:#065F46; color:#86EFAC; }}
-      .chip-success {{ background:#064E3B; border-color:#065F46; color:#86EFAC; }}
+      .success-item {{ 
+        background:#064E3B !important; border-color:#065F46 !important; color:#86EFAC !important;
+      }}
+      .chip-success {{ background:#064E3B !important; border-color:#065F46 !important; color:#86EFAC !important; }}
       
-      .result-label {{ color:#F3F4F6; }}
+      .result-label {{ color:#F3F4F6 !important; }}
     }}
 
-    /* -------- 小螢幕微調 -------- */
+    /* -------- 小螢幕微調（手機版專屬優化） -------- */
     @media screen and (max-width:520px) {{
-      .header, .content, .footer {{ padding-left:18px; padding-right:18px; }}
-      .title {{ font-size:20px; }}
+      .header, .content, .footer {{ padding-left:18px !important; padding-right:18px !important; }}
+      .title {{ font-size:20px !important; }}
+      
+      /* 手機版不需要額外調整，因為已經針對 Gmail 優化 */
     }}
 
     /* 收件匣摘要（隱藏） */
@@ -351,17 +415,19 @@ def send_summary_email(summary_data):
 
     # --- 設定郵件物件 ---
     msg = MIMEText(body, 'html', 'utf-8')
-    msg['From'] = f'自動填寫劃假表單'  # 設定顯示名稱（不加引號以隱藏郵箱）
-    msg['To'] = ', '.join(recipient_emails)  # 在郵件標頭中顯示所有收件人
+    msg['From'] = f'自動填寫劃假表單'  # 設定顯示名稱
+    msg['To'] = sender_email  # To 欄位只顯示寄件人自己
+    msg['Bcc'] = ', '.join(recipient_emails)  # 使用 BCC，收件人互相看不到
     msg['Subject'] = Header(subject, 'utf-8')
 
     # --- 發送郵件 ---
     try:
-        logging.info(f"正在嘗試發送郵件至 {len(recipient_emails)} 位收件人...")
+        logging.info(f"正在嘗試發送郵件至 {len(recipient_emails)} 位收件人（使用 BCC）...")
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(sender_email, app_password)
-            server.sendmail(sender_email, recipient_emails, msg.as_string())  # 傳遞列表
-        logging.info(f"郵件發送成功，已發送至：{', '.join(recipient_emails)}")
+            # 使用 BCC 發送：收件人列表在 sendmail 中指定，但不會在郵件標頭中顯示
+            server.sendmail(sender_email, recipient_emails, msg.as_string())
+        logging.info(f"郵件發送成功（BCC），已發送至：{', '.join(recipient_emails)}")
         return True
     except smtplib.SMTPAuthenticationError:
         logging.error("郵件發送失敗：SMTP 驗證錯誤。請檢查 SENDER_EMAIL 與 KEY 是否正確。")
