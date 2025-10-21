@@ -9,9 +9,9 @@ import logging
 def render_email_html(summary_data: dict) -> str:
     """
     產生精美、相容度高的郵件 HTML（無 emoji）。
-    - 使用表格為骨架（傳統郵件相容度較佳）
-    - 內嵌 CSS，並包含簡單的深色模式支援
-    - 含 preheader（於收件匣摘要顯示）
+    - 專業 UX/UI 配色與排版
+    - 高對比，深/淺色模式皆清楚
+    - 仍以 table 為骨架提高相容度
     """
     submitted_days = summary_data.get("submitted_days", [])
     submitted_days_str = "、".join(submitted_days) if submitted_days else "（無）"
@@ -21,17 +21,17 @@ def render_email_html(summary_data: dict) -> str:
     failed_days = summary_data.get("failed_days", []) or []
     failed_days_str = "、".join(failed_days) if failed_days else ""
 
-    preheader = f"本次提交：{submitted_days_str}"  # 收件匣摘要
+    preheader = f"本次提交：{submitted_days_str}"
 
     # 理由列表 HTML
     reasons_items = []
     if reasons.get("sat"):
         reasons_items.append(
-            f"<li><span class='day'>星期六</span><span class='reason'>{reasons['sat']}</span></li>"
+            f"<li><span class='chip chip-day'>星期六</span><span class='reason'>{reasons['sat']}</span></li>"
         )
     if reasons.get("sun"):
         reasons_items.append(
-            f"<li><span class='day'>星期日</span><span class='reason'>{reasons['sun']}</span></li>"
+            f"<li><span class='chip chip-day'>星期日</span><span class='reason'>{reasons['sun']}</span></li>"
         )
     reasons_html = ""
     if reasons_items:
@@ -44,25 +44,24 @@ def render_email_html(summary_data: dict) -> str:
             </ul>
           </td>
         </tr>
-        """.format(
-            items="\n".join(reasons_items)
-        )
+        """.format(items="\n".join(reasons_items))
 
     # 執行結果 HTML
     if all_success:
         result_html = """
-        <p class="badge success">全數成功</p>
+        <div class="status">
+          <span class="badge success">全數成功</span>
+          <p class="hint">已成功提交所有指定表單。</p>
+        </div>
         """
     else:
-        extra = (
-            f"<p class='failed-list'><b>失敗的表單：</b>{failed_days_str}</p>"
-            if failed_days_str
-            else ""
-        )
+        extra = f"<p class='failed-list'><b>失敗的表單：</b>{failed_days_str}</p>" if failed_days_str else ""
         result_html = f"""
-        <p class="badge failure">未全數成功</p>
-        {extra}
-        <p class="hint"><b>失敗原因：</b>請查看程式執行的日誌輸出以取得詳細錯誤訊息。</p>
+        <div class="status">
+          <span class="badge failure">未全數成功</span>
+          {extra}
+          <p class="hint">請查看程式的日誌輸出以了解詳細錯誤原因。</p>
+        </div>
         """
 
     return f"""\
@@ -72,84 +71,119 @@ def render_email_html(summary_data: dict) -> str:
   <meta charset="utf-8">
   <meta name="x-apple-disable-message-reformatting">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>表單提交總結報告</title>
   <style>
-    /* 基礎重置 */
+    /* -------- 基礎重置 -------- */
     body,table,td,p,span,a {{ margin:0; padding:0; }}
-    body {{
-      background-color:#f4f7f6; 
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
-      color:#333333; 
-      line-height:1.6;
-    }}
-    a {{ color:#0b65c2; text-decoration:none; }}
     img {{ border:0; line-height:100%; outline:none; text-decoration:none; max-width:100%; }}
-    /* 外框容器（使用 table 以提升相容度） */
-    .wrapper {{ width:100%; background:#f4f7f6; padding:24px 12px; }}
+    a {{ text-decoration:none; }}
+
+    /* -------- 淺色主題（預設） -------- */
+    body {{
+      background:#F6F8FC;
+      color:#111827; /* 高對比正文 */
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+      line-height:1.65;
+    }}
+    .wrapper {{ width:100%; padding:28px 12px; }}
     .container {{
-      width:100%; max-width:680px; margin:0 auto; background:#ffffff; 
-      border:1px solid #e6e6e6; border-radius:12px; overflow:hidden;
+      width:100%; max-width:720px; margin:0 auto; background:#FFFFFF;
+      border:1px solid #E5E7EB; border-radius:12px; overflow:hidden;
     }}
     .header {{
-      padding:28px 32px; 
-      background:linear-gradient(135deg,#f8fafc 0%, #ffffff 100%);
-      border-bottom:1px solid #eef1f4;
+      padding:24px 28px;
+      background:#FFFFFF;
+      border-bottom:1px solid #E5E7EB;
     }}
-    .title {{ font-size:22px; font-weight:700; letter-spacing:0.2px; }}
-    .subtle {{ color:#6b7280; font-size:13px; margin-top:6px; }}
-    .content {{ padding:8px 32px 28px 32px; }}
+    .eyebrow {{
+      font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+      color:#2563EB; font-weight:700; margin-bottom:6px;
+    }}
+    .title {{
+      font-size:22px; font-weight:800; color:#0F172A; /* 更深的標題色 */
+    }}
+    .content {{ padding:8px 28px 28px 28px; }}
     .section {{ padding:18px 0; }}
-    .section + .section {{ border-top:1px dashed #eaecef; }}
-    .section-title {{ font-size:16px; font-weight:700; color:#374151; margin-bottom:10px; }}
+    .section + .section {{ border-top:1px solid #EEF2F7; }}
+    .section-title {{
+      font-size:15px; font-weight:800; color:#0F172A; margin-bottom:10px;
+      padding-left:10px; border-left:3px solid #2563EB; /* 清楚的視覺錨點 */
+    }}
+
+    /* 資訊卡：提高對比 */
     .card {{
-      background:#fafbfc; border:1px solid #eef1f4; border-radius:10px;
+      background:#F9FAFB;
+      border:1px solid #E5E7EB;
+      border-radius:10px;
       padding:14px 16px;
     }}
-    .meta p {{ margin:0 0 6px 0; }}
-    .badge {{
-      display:inline-block; font-size:13px; font-weight:700; border-radius:999px; padding:6px 12px; 
-      border:1px solid transparent;
+    .meta p {{ margin:0 0 6px 0; color:#111827; }}
+    .meta b {{ color:#0F172A; }}
+
+    /* 膠囊標籤、狀態徽章 */
+    .chip {{
+      display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700;
+      border:1px solid #C7D2FE; background:#EEF2FF; color:#1E3A8A;
+      vertical-align:middle; margin-right:8px;
     }}
-    .badge.success {{ color:#166534; background:#ecfdf5; border-color:#a7f3d0; }}
-    .badge.failure {{ color:#7f1d1d; background:#fef2f2; border-color:#fecaca; }}
-    .failed-list {{ margin-top:8px; }}
-    .hint {{ color:#6b7280; font-size:13px; margin-top:8px; }}
+    .chip-day {{ min-width:56px; text-align:center; }}
+
+    .badge {{
+      display:inline-block; padding:7px 12px; border-radius:999px;
+      font-size:13px; font-weight:800; border:1px solid transparent;
+    }}
+    .badge.success {{ color:#065F46; background:#ECFDF5; border-color:#A7F3D0; }}
+    .badge.failure {{ color:#7F1D1D; background:#FEF2F2; border-color:#FECACA; }}
+
+    .status {{ display:block; }}
+    .failed-list {{ margin:8px 0 0 0; color:#B91C1C; }}
+    .hint {{ color:#4B5563; font-size:13px; margin-top:6px; }}
+
+    /* 理由列表：條列與留白 */
     .reasons {{ list-style:none; padding-left:0; margin:0; }}
     .reasons li {{
       display:flex; gap:10px; align-items:flex-start;
-      background:#f9fafb; border:1px solid #eceff3; border-radius:8px; padding:10px 12px; margin-bottom:8px;
+      background:#F9FAFB; border:1px solid #E5E7EB; border-radius:10px;
+      padding:10px 12px; margin-bottom:8px;
+      color:#111827;
     }}
-    .reasons .day {{ min-width:56px; font-weight:700; color:#374151; }}
-    .reasons .reason {{ color:#374151; }}
+    .reasons .reason {{ flex:1; }}
+
     .footer {{
-      padding:18px 32px; border-top:1px solid #eef1f4; color:#6b7280; font-size:12px; text-align:center;
-      background:#fafbfc;
+      padding:16px 28px; border-top:1px solid #E5E7EB; color:#6B7280; font-size:12px; text-align:center;
+      background:#FAFAFA;
     }}
-    /* 深色模式 */
+
+    /* -------- 深色模式：手動指定避免被客戶端自動反色影響對比 -------- */
     @media (prefers-color-scheme: dark) {{
-      body {{ background:#0b0f14; color:#e5e7eb; }}
-      .wrapper {{ background:#0b0f14; }}
-      .container {{ background:#0f1720; border-color:#1f2937; }}
-      .header {{ background:linear-gradient(135deg,#0f1720 0%, #111827 100%); border-color:#1f2937; }}
-      .title {{ color:#e5e7eb; }}
-      .subtle {{ color:#9ca3af; }}
-      .section + .section {{ border-top-color:#1f2937; }}
-      .card {{ background:#0b1220; border-color:#1f2a3a; }}
-      .section-title, .reasons .day, .reasons .reason {{ color:#e5e7eb; }}
-      .footer {{ background:#0b1220; border-color:#1f2937; color:#9ca3af; }}
-      .badge.success {{ color:#86efac; background:#052e1a; border-color:#14532d; }}
-      .badge.failure {{ color:#fca5a5; background:#2a0b0b; border-color:#7f1d1d; }}
-      .reasons li {{ background:#0f1720; border-color:#1f2937; }}
-      .hint {{ color:#9ca3af; }}
+      body {{ background:#0B0F14; color:#E5E7EB; }}
+      .container {{ background:#0F1720; border-color:#1F2937; }}
+      .header {{ background:#0F1720; border-bottom-color:#1F2937; }}
+      .title {{ color:#F3F4F6; }}
+      .section + .section {{ border-top-color:#1F2937; }}
+      .section-title {{ color:#F3F4F6; border-left-color:#3B82F6; }}
+      .card {{ background:#111827; border-color:#334155; }}
+      .meta p {{ color:#E5E7EB; }}
+      .meta b {{ color:#FFFFFF; }}
+      .chip {{ background:#13233F; border-color:#1E3A8A; color:#93C5FD; }}
+      .reasons li {{ background:#111827; border-color:#334155; color:#E5E7EB; }}
+      .footer {{ background:#0F1720; border-top-color:#1F2937; color:#9CA3AF; }}
+      .hint {{ color:#9CA3AF; }}
+      .badge.success {{ color:#86EFAC; background:#052E1A; border-color:#14532D; }}
+      .badge.failure {{ color:#FCA5A5; background:#2A0B0B; border-color:#7F1D1D; }}
+      .failed-list {{ color:#FCA5A5; }}
     }}
-    /* 小螢幕微調 */
-    @media screen and (max-width: 520px) {{
+
+    /* -------- 小螢幕微調 -------- */
+    @media screen and (max-width:520px) {{
       .header, .content, .footer {{ padding-left:18px; padding-right:18px; }}
       .title {{ font-size:20px; }}
     }}
-    /* 隱藏 preheader */
+
+    /* 收件匣摘要（隱藏） */
     .preheader {{
-      display:none !important; visibility:hidden; opacity:0; color:transparent; height:0; width:0; 
+      display:none !important; visibility:hidden; opacity:0; color:transparent; height:0; width:0;
       overflow:hidden; mso-hide:all;
     }}
   </style>
@@ -162,8 +196,8 @@ def render_email_html(summary_data: dict) -> str:
         <table role="presentation" class="container" cellpadding="0" cellspacing="0" width="100%">
           <tr>
             <td class="header">
+              <div class="eyebrow">Google Form Auto-Filler</div>
               <div class="title">表單提交總結報告</div>
-              <div class="subtle">此報告由系統自動產生</div>
             </td>
           </tr>
           <tr>
