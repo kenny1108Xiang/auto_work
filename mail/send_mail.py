@@ -4,6 +4,8 @@ from email.mime.text import MIMEText
 from email.header import Header
 from dotenv import load_dotenv
 import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 
 def render_email_html(summary_data: dict) -> str:
@@ -372,9 +374,77 @@ def render_email_html(summary_data: dict) -> str:
 </html>"""
 
 
+async def send_email_to_single_recipient_async(recipient_email, sender_email, app_password, subject, body):
+    """
+    異步發送郵件給單一收件人（使用 Python 3.14 的 async 特性）。
+    
+    Args:
+        recipient_email (str): 收件人郵箱
+        sender_email (str): 寄件人郵箱
+        app_password (str): 應用程式密碼
+        subject (str): 郵件主旨
+        body (str): 郵件內容 (HTML)
+    
+    Returns:
+        tuple: (收件人郵箱, 是否成功)
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        # 在執行緒池中執行同步的 SMTP 操作
+        def send_sync():
+            msg = MIMEText(body, 'html', 'utf-8')
+            msg['From'] = f'自動填寫劃假表單 <{sender_email}>'
+            msg['To'] = recipient_email
+            msg['Subject'] = Header(subject, 'utf-8')
+            
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                server.login(sender_email, app_password)
+                server.sendmail(sender_email, [recipient_email], msg.as_string())
+        
+        await loop.run_in_executor(None, send_sync)
+        logging.info(f"✓ 郵件已成功發送至：{recipient_email}")
+        return (recipient_email, True)
+    except Exception as e:
+        logging.error(f"✗ 發送至 {recipient_email} 失敗：{e}")
+        return (recipient_email, False)
+
+
+def send_email_to_single_recipient(recipient_email, sender_email, app_password, subject, body):
+    """
+    發送郵件給單一收件人（同步版本，保留向後相容）。
+    
+    Args:
+        recipient_email (str): 收件人郵箱
+        sender_email (str): 寄件人郵箱
+        app_password (str): 應用程式密碼
+        subject (str): 郵件主旨
+        body (str): 郵件內容 (HTML)
+    
+    Returns:
+        tuple: (收件人郵箱, 是否成功)
+    """
+    try:
+        msg = MIMEText(body, 'html', 'utf-8')
+        msg['From'] = f'自動填寫劃假表單 <{sender_email}>'
+        msg['To'] = recipient_email
+        msg['Subject'] = Header(subject, 'utf-8')
+        
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(sender_email, app_password)
+            server.sendmail(sender_email, [recipient_email], msg.as_string())
+        
+        logging.info(f"✓ 郵件已成功發送至：{recipient_email}")
+        return (recipient_email, True)
+    except Exception as e:
+        logging.error(f"✗ 發送至 {recipient_email} 失敗：{e}")
+        return (recipient_email, False)
+
+
 def send_summary_email(summary_data):
     """
     發送總結報告郵件。
+    - 如果只有 1 個收件人：同步發送
+    - 如果有多個收件人：非同步並發送（加速）
 
     Args:
         summary_data (dict): 包含報告內容的字典。
@@ -413,25 +483,72 @@ def send_summary_email(summary_data):
     subject = "自動填寫工作劃假表單總結報告"
     body = render_email_html(summary_data)
 
-    # --- 設定郵件物件 ---
-    msg = MIMEText(body, 'html', 'utf-8')
-    msg['From'] = f'自動填寫劃假表單'  # 設定顯示名稱
-    msg['To'] = sender_email  # To 欄位只顯示寄件人自己
-    msg['Bcc'] = ', '.join(recipient_emails)  # 使用 BCC，收件人互相看不到
-    msg['Subject'] = Header(subject, 'utf-8')
-
-    # --- 發送郵件 ---
-    try:
-        logging.info(f"正在嘗試發送郵件至 {len(recipient_emails)} 位收件人（使用 BCC）...")
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(sender_email, app_password)
-            # 使用 BCC 發送：收件人列表在 sendmail 中指定，但不會在郵件標頭中顯示
-            server.sendmail(sender_email, recipient_emails, msg.as_string())
-        logging.info(f"郵件發送成功（BCC），已發送至：{', '.join(recipient_emails)}")
-        return True
-    except smtplib.SMTPAuthenticationError:
-        logging.error("郵件發送失敗：SMTP 驗證錯誤。請檢查 SENDER_EMAIL 與 KEY 是否正確。")
-        return False
-    except Exception as e:
-        logging.error(f"郵件發送時發生未預期的錯誤：{e}")
-        return False
+    # --- 判斷發送方式 ---
+    if len(recipient_emails) == 1:
+        # 只有 1 個收件人：同步發送
+        logging.info(f"單一收件人，使用同步發送...")
+        try:
+            msg = MIMEText(body, 'html', 'utf-8')
+            msg['From'] = f'自動填寫劃假表單 <{sender_email}>'
+            msg['To'] = recipient_emails[0]
+            msg['Subject'] = Header(subject, 'utf-8')
+            
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                server.login(sender_email, app_password)
+                server.sendmail(sender_email, recipient_emails, msg.as_string())
+            
+            logging.info(f"郵件發送成功，已發送至：{recipient_emails[0]}")
+            return True
+        except smtplib.SMTPAuthenticationError:
+            logging.error("郵件發送失敗：SMTP 驗證錯誤。請檢查 SENDER_EMAIL 與 KEY 是否正確。")
+            return False
+        except Exception as e:
+            logging.error(f"郵件發送時發生未預期的錯誤：{e}")
+            return False
+    else:
+        # 多個收件人：使用 Python 3.14 的異步並發發送
+        logging.info(f"多個收件人 ({len(recipient_emails)} 位)，使用異步並發送（Python 3.14）...")
+        
+        async def send_all_emails():
+            """使用 asyncio.TaskGroup（Python 3.14 特性）並發發送所有郵件"""
+            results = []
+            
+            # Python 3.14 的 TaskGroup 提供更好的錯誤處理和資源管理
+            async with asyncio.TaskGroup() as tg:
+                tasks = [
+                    tg.create_task(
+                        send_email_to_single_recipient_async(
+                            email, sender_email, app_password, subject, body
+                        )
+                    )
+                    for email in recipient_emails
+                ]
+            
+            # 收集所有結果
+            for task in tasks:
+                results.append(await task)
+            
+            return results
+        
+        # 執行異步發送
+        try:
+            results = asyncio.run(send_all_emails())
+        except* Exception as eg:  # Python 3.11+ 的 ExceptionGroup 語法
+            logging.error(f"發送過程中發生多個錯誤：{eg}")
+            results = []
+        
+        # 統計結果
+        success_count = sum(1 for _, success in results if success)
+        failed_count = len(results) - success_count
+        failed_emails = [email for email, success in results if not success]
+        
+        # 顯示結果
+        logging.info("=" * 60)
+        logging.info("郵件發送總結")
+        logging.info(f"成功：{success_count} 封")
+        logging.info(f"失敗：{failed_count} 封")
+        if failed_emails:
+            logging.error(f"失敗的郵箱：{', '.join(failed_emails)}")
+        logging.info("=" * 60)
+        
+        return failed_count == 0
