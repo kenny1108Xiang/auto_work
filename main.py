@@ -321,10 +321,13 @@ def wait_for_scheduled_time():
             # 決定 sleep 的時間，越接近目標時間，檢查頻率越高
             if wait_seconds > 60:
                 time.sleep(1)
-            elif wait_seconds > 1:
+            elif wait_seconds > 5:
                 time.sleep(0.1)
+            elif wait_seconds > 0.5:
+                # 最後 5 秒：每 0.01 秒檢查一次（10ms 精度）
+                time.sleep(0.01)
             else:
-                # 最後一秒高精度等待
+                # 最後 0.5 秒：精確等待到目標時間
                 time.sleep(wait_seconds)
                 break
             
