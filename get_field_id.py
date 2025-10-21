@@ -12,6 +12,10 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+class FormClosedException(Exception):
+    """自訂異常：用於表示表單已關閉、已滿或不接受回應"""
+    pass
+
 
 def resolve_short_url(day_number, mode=1):
     """
